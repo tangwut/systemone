@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SystemOne · 贪吃蛇</title>
+  <style>
+    :root { color-scheme:dark; --bg:#08151b; --panel:#12232a; --edge:#29424a; --text:#e7f5f0; --muted:#92aea9; --accent:#76e8aa; --food:#ff927e; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at 9% 3%,#19433d 0,transparent 34%),var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,"PingFang SC",sans-serif; }
+    header, main, footer { max-width:1450px; margin:auto; }
+    header { padding:24px 26px 8px; display:flex; align-items:end; justify-content:space-between; gap:16px; }
+    h1 { margin:0; font-size:27px; } h2 { margin:0 0 12px; color:var(--accent); font-size:14px; letter-spacing:.07em; }
+    p { color:var(--muted); margin:6px 0 0; }
+    .pill { border:1px solid var(--edge); border-radius:999px; padding:7px 12px; color:var(--accent); background:#13332f; white-space:nowrap; }
+    main { display:grid; grid-template-columns:minmax(350px,465px) minmax(280px,1fr) minmax(310px,1fr); gap:17px; padding:15px 26px 26px; align-items:start; }
+    section { border:1px solid var(--edge); border-radius:18px; padding:18px; background:linear-gradient(145deg,#172c32,#102029); box-shadow:0 16px 45px #0004; }
+    canvas { display:block; width:min(100%,420px); height:auto; margin:auto; border:1px solid #42676a; border-radius:10px; background:#0b1a21; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin:15px 0; }
+    .stat { padding:9px; background:#0a1c22; border:1px solid var(--edge); border-radius:10px; }
+    .stat span { display:block; color:var(--muted); font-size:11px; } .stat strong { font-size:20px; font-variant-numeric:tabular-nums; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; }
+    button { border:1px solid #3e7967; border-radius:9px; padding:9px 13px; background:#1d5748; color:var(--text); font-weight:650; cursor:pointer; }
+    button:hover { border-color:var(--accent); } button.secondary { background:#193039; border-color:#3c5960; }
+    .speed { display:flex; align-items:center; gap:10px; margin:15px 0 0; color:var(--muted); }
+    input[type=range] { flex:1; accent-color:var(--accent); }
+    .status { min-height:48px; margin-top:13px; padding:10px 12px; border-left:3px solid var(--accent); border-radius:8px; background:#0d2528; }
+    .status.error { border-color:var(--food); color:#ffbfb0; }
+    .headrow { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .muted { color:var(--muted); }
+    .moves { display:grid; gap:9px; margin-top:14px; }
+    .move { display:grid; grid-template-columns:76px 1fr; gap:10px; background:#0c2027; border:1px solid #28444a; border-radius:12px; padding:12px; text-align:left; font-weight:400; }
+    .move.selected { border-color:var(--accent); background:#174138; }
+    .arrow { font-size:22px; line-height:1; color:var(--accent); }
+    .move small { display:block; margin-top:3px; color:var(--muted); font-size:12px; }
+    .probability { display:flex; align-items:center; gap:8px; color:var(--accent); margin-top:7px; font:11px ui-monospace,monospace; }
+    .probability i { height:4px; min-width:2px; background:var(--accent); border-radius:3px; }
+    .decision { padding:10px 12px; border-radius:8px; background:#0b2026; min-height:46px; }
+    details { border-top:1px solid var(--edge); padding:11px 0; }
+    summary { cursor:pointer; color:#cfebe0; }
+    pre { max-height:210px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:11px; border-radius:8px; background:#07191e; color:#b0d5ca; font:11px/1.5 ui-monospace,monospace; }
+    .events { max-height:270px; overflow:auto; display:flex; flex-direction:column-reverse; gap:5px; }
+    .event { padding:3px 7px; border-left:2px solid #3e8276; color:#bad4cb; font-size:12px; }
+    .event:first-child { color:var(--accent); }
+    footer { padding:0 26px 24px; color:var(--muted); font-size:12px; }
+    a { color:var(--accent); }
+    @media (max-width:1080px) { main { grid-template-columns:minmax(350px,465px) 1fr; } .detail { grid-column:1/-1; } }
+    @media (max-width:720px) { header { padding:19px 15px 6px; align-items:start; flex-direction:column; } main { padding:12px 15px; grid-template-columns:1fr; } .detail { grid-column:auto; } }
+  </style>
+</head>
+<body>
+  <header><div><h1>SystemOne × 贪吃蛇</h1><p>每走一格由模型选择方向，完整展示决策与移动过程</p></div><div class="pill" id="model-pill">模型：english · 等待开始</div></header>
+  <main>
+    <section>
+      <h2>游戏棋盘</h2>
+      <canvas id="board" width="480" height="480" aria-label="贪吃蛇棋盘"></canvas>
+      <div class="stats"><div class="stat"><span>食物</span><strong id="score">0</strong></div><div class="stat"><span>步数</span><strong id="steps">0</strong></div><div class="stat"><span>蛇身长度</span><strong id="length">3</strong></div></div>
+      <div class="controls"><button id="start">开始自动运行</button><button id="step" class="secondary">单步移动</button><button id="pause" class="secondary">暂停</button><button id="reset" class="secondary">重开</button></div>
+      <label class="speed">移动间隔 <input id="speed" type="range" min="40" max="800" value="250"><span id="speed-value">250 ms</span></label>
+      <div class="status" id="status" role="status">准备就绪。点击“开始自动运行”或“单步移动”。</div>
+    </section>
+    <section>
+      <div class="headrow"><h2>可选方向</h2><span class="muted" id="move-count">0 个</span></div>
+      <p>规则先排除碰撞和危险绕路，保留安全且接近食物的方向；SystemOne 从显示的候选中选择。</p>
+      <div class="moves" id="moves"></div>
+    </section>
+    <section class="detail">
+      <h2>本步决策</h2><div class="decision" id="decision-summary">尚无模型决策</div>
+      <h2 style="margin-top:18px">控制指令</h2><div class="decision" id="command">—</div>
+      <details open><summary>发给 SystemOne 的请求</summary><pre id="request">—</pre></details>
+      <details open><summary>SystemOne 原始响应</summary><pre id="response">—</pre></details>
+      <h2 style="margin-top:12px">逐步记录</h2><div class="events" id="events"></div>
+    </section>
+  </main>
+  <footer>页面直接请求 main.py 的 /api/v1/systemone；没有模型响应时会暂停。<a href="../tetris/index.html">返回俄罗斯方块</a></footer>
+  <script src="./core.js"></script>
+  <script src="../config.js"></script>
+  <script>
+    const { SIZE, initialState, advance, decisionOptions, buildDecisionRequest, readChoice, decisionProbabilities } = window.SnakeCore;
+    const API_KEY = window.SYSTEMONE_API_KEY;
+    const API_URL = 'http://127.0.0.1:8000/api/v1/systemone';
+    const $ = id => document.getElementById(id);
+    const ctx = $('board').getContext('2d');
+    const arrow = { up:'↑', right:'→', down:'↓', left:'←' };
+    const label = { up:'上', right:'右', down:'下', left:'左' };
+    let state, options, selected, probabilities, running, busy, generation;
+
+    function drawCell(x, y, color, inset = 2) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * 30 + inset, y * 30 + inset, 30 - inset * 2, 30 - inset * 2);
+    }
+    function render() {
+      ctx.fillStyle = '#0b1a21'; ctx.fillRect(0, 0, 480, 480);
+      ctx.strokeStyle = '#1c353b'; ctx.lineWidth = 1;
+      for (let i = 1; i < SIZE; i++) {
+        ctx.beginPath(); ctx.moveTo(i * 30 + .5, 0); ctx.lineTo(i * 30 + .5, 480); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * 30 + .5); ctx.lineTo(480, i * 30 + .5); ctx.stroke();
+      }
+      if (state.food) drawCell(state.food.x, state.food.y, '#ff927e', 5);
+      for (const cell of state.snake.slice(1)) drawCell(cell.x, cell.y, '#3eaa78');
+      drawCell(state.snake[0].x, state.snake[0].y, '#a0f5c2');
+      if (selected) drawCell(selected.head.x, selected.head.y, '#e8fd9c', 9);
+    }
+    function setStatus(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
+    function log(message) { const item = document.createElement('div'); item.className = 'event'; item.textContent = `${new Date().toLocaleTimeString()}  ${message}`; $('events').prepend(item); }
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+    function renderMoves() {
+      $('move-count').textContent = `${options.length} 个`;
+      $('moves').replaceChildren(...options.map(option => {
+        const item = document.createElement('div');
+        item.className = `move${selected?.direction === option.direction ? ' selected' : ''}`;
+        const sign = document.createElement('strong'); sign.className = 'arrow'; sign.textContent = arrow[option.direction];
+        const detail = document.createElement('div');
+        detail.textContent = `${label[option.direction]} · 下一格 (${option.head.x}, ${option.head.y})${option.eating ? ' · 吃到食物' : ''}`;
+        const extra = document.createElement('small');
+        extra.textContent = `安全空间 ${option.reachableCells} 格 · 食物距离 ${option.foodDistance ?? '不可达'}`;
+        detail.append(extra);
+        if (probabilities) {
+          const probability = document.createElement('div'); probability.className = 'probability';
+          const bar = document.createElement('i'); bar.style.width = `${Math.max(2, probabilities[option.direction] * 100)}%`;
+          const value = document.createElement('span'); value.textContent = `模型概率 ${(probabilities[option.direction] * 100).toFixed(1)}%`;
+          probability.append(bar, value); detail.append(probability);
+        }
+        item.append(sign, detail); return item;
+      }));
+    }
+    function reset() {
+      generation++; running = false; busy = false;
+      state = initialState(); options = []; selected = null; probabilities = null;
+      $('score').textContent = '0'; $('steps').textContent = '0'; $('length').textContent = String(state.snake.length);
+      $('request').textContent = '—'; $('response').textContent = '—'; $('decision-summary').textContent = '尚无模型决策'; $('command').textContent = '—';
+      $('model-pill').textContent = '模型：english · 等待开始'; $('events').replaceChildren();
+      setStatus('准备就绪。点击“开始自动运行”或“单步移动”。'); renderMoves(); render();
+    }
+    async function oneStep(token) {
+      busy = true; selected = null; probabilities = null;
+      options = decisionOptions(state); renderMoves(); render();
+      if (!options.length) { state.over = true; running = false; busy = false; setStatus(`游戏结束：无路可走。吃到 ${state.score} 个食物。`); log('游戏结束'); return; }
+      const request = buildDecisionRequest(state, options);
+      $('request').textContent = JSON.stringify(request, null, 2); $('response').textContent = '等待模型响应…';
+      $('decision-summary').textContent = `第 ${state.steps + 1} 步：等待 SystemOne 选择方向…`;
+      setStatus('SystemOne 正在选择下一步方向…'); log(`提交第 ${state.steps + 1} 步，${options.length} 个可选方向`);
+      try {
+        const started = performance.now();
+        const response = await fetch(API_URL, {
+          method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${API_KEY}` }, body:JSON.stringify(request),
+        });
+        const data = await response.json();
+        if (token !== generation) return;
+        $('response').textContent = JSON.stringify(data, null, 2);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data)}`);
+        selected = readChoice(data, options); probabilities = decisionProbabilities(data, options);
+        const elapsed = Math.round(performance.now() - started);
+        $('model-pill').textContent = `模型：${data.routing?.model || 'english'} · ${elapsed} ms`;
+        $('decision-summary').textContent = `第 ${state.steps + 1} 步：${label[selected.direction]} ${arrow[selected.direction]} · ${elapsed} ms`;
+        $('command').textContent = `${selected.direction} ${arrow[selected.direction]}`;
+        renderMoves(); render(); log(`SystemOne 选择 ${selected.direction}（${elapsed} ms）`);
+        setStatus(`准备向${label[selected.direction]}移动…`);
+        await sleep(Number($('speed').value));
+        if (token !== generation) return;
+        const ate = selected.eating;
+        state = advance(state, selected.direction);
+        $('score').textContent = String(state.score); $('steps').textContent = String(state.steps); $('length').textContent = String(state.snake.length);
+        log(`执行 ${selected.direction}${ate ? '，吃到食物' : ''}`);
+        selected = null; render();
+        if (state.won) { running = false; setStatus('胜利：棋盘已填满！'); }
+        else setStatus(`已移动 ${state.steps} 步，吃到 ${state.score} 个食物。`);
+      } catch (error) {
+        if (token === generation) { running = false; setStatus(`决策暂停：${error.message}`, true); log(`错误：${error.message}`); }
+      } finally { if (token === generation) busy = false; }
+    }
+    async function loop(single = false) {
+      if (busy || state.over || state.won) return;
+      const token = generation; running = !single;
+      do { await oneStep(token); } while (running && token === generation);
+    }
+    $('start').onclick = () => { if (busy) { running = true; return; } loop(false); };
+    $('step').onclick = () => loop(true);
+    $('pause').onclick = () => { running = false; setStatus('将在当前一步结束后暂停。'); };
+    $('reset').onclick = reset;
+    $('speed').oninput = () => { $('speed-value').textContent = `${$('speed').value} ms`; };
+    generation = 0; reset();
+  </script>
+</body>
+</html>

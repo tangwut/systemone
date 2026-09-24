@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SystemOne · 俄罗斯方块</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0a1020; --panel:#121b2f; --edge:#283650; --ink:#e8efff; --muted:#91a2c1; --accent:#5eead4; --blue:#70a9ff; --warn:#fbbf72; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at 16% 8%,#1c3150 0,transparent 34%),var(--bg); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"PingFang SC",sans-serif; }
+    header { max-width:1440px; margin:auto; padding:25px 30px 12px; display:flex; align-items:end; justify-content:space-between; gap:18px; }
+    h1 { margin:0; font-size:26px; letter-spacing:.02em; }
+    h2 { margin:0 0 12px; font-size:14px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); }
+    p { margin:7px 0 0; color:var(--muted); }
+    .pill { padding:7px 12px; border:1px solid var(--edge); border-radius:999px; color:var(--accent); background:#13283a; white-space:nowrap; }
+    main { max-width:1440px; margin:auto; padding:16px 30px 30px; display:grid; grid-template-columns:minmax(310px,370px) minmax(300px,1fr) minmax(300px,1fr); gap:18px; align-items:start; }
+    section { background:linear-gradient(145deg,#17223a,#10192b); border:1px solid var(--edge); border-radius:18px; padding:18px; box-shadow:0 18px 50px #0003; }
+    .board-wrap { position:relative; width:min(100%,330px); margin:auto; }
+    canvas { display:block; width:100%; height:auto; border:1px solid #425475; border-radius:7px; background:#0a1427; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin:15px 0; }
+    .stat { background:#0c1729; border:1px solid var(--edge); border-radius:11px; padding:9px; }
+    .stat span { display:block; color:var(--muted); font-size:11px; }
+    .stat strong { font-size:20px; font-variant-numeric:tabular-nums; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; }
+    button { border:1px solid #386276; background:#16414d; color:var(--ink); border-radius:9px; padding:9px 13px; cursor:pointer; font-weight:650; }
+    button:hover { border-color:var(--accent); }
+    button.secondary { background:#18243b; border-color:#34445e; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .speed { margin:15px 0 0; display:flex; align-items:center; gap:10px; color:var(--muted); }
+    .speed input { flex:1; accent-color:var(--accent); }
+    .status { min-height:48px; margin-top:14px; padding:10px 12px; border-radius:9px; background:#0d1c2f; border-left:3px solid var(--accent); }
+    .status.error { border-color:#ff7686; color:#ffb9c1; }
+    .headrow { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .muted { color:var(--muted); }
+    .candidate-list { display:grid; gap:7px; max-height:570px; overflow:auto; margin-top:12px; }
+    .candidate { display:grid; grid-template-columns:43px 1fr; gap:8px; width:100%; text-align:left; background:#0d182a; border:1px solid #263850; padding:10px; border-radius:10px; font-weight:400; }
+    .candidate strong { color:var(--blue); }
+    .candidate small { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
+    .candidate.selected { border-color:var(--accent); background:#123538; box-shadow:inset 0 0 0 1px #5eead444; }
+    .candidate.preview { border-color:var(--blue); }
+    .probability { display:flex; align-items:center; gap:7px; margin-top:7px; color:var(--accent); font:11px ui-monospace,SFMono-Regular,monospace; }
+    .probability i { display:block; height:4px; min-width:2px; border-radius:4px; background:var(--accent); }
+    .timeline { display:flex; flex-wrap:wrap; gap:7px; min-height:34px; margin:9px 0 15px; }
+    .cmd { padding:6px 8px; border-radius:7px; background:#1c2c43; color:var(--muted); font:12px ui-monospace,SFMono-Regular,monospace; }
+    .cmd.active { background:#145a59; color:white; }
+    .cmd.done { background:#21464a; color:var(--accent); }
+    details { border-top:1px solid var(--edge); padding:11px 0; }
+    summary { cursor:pointer; color:#c5d6f1; }
+    pre { max-height:190px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:#081322; padding:11px; border-radius:8px; color:#a9c7ec; font:11px/1.5 ui-monospace,SFMono-Regular,monospace; }
+    .events { max-height:230px; overflow:auto; display:flex; flex-direction:column-reverse; gap:6px; }
+    .event { border-left:2px solid #3b6685; padding:3px 7px; color:#b6c5dc; font-size:12px; }
+    .event:first-child { color:var(--accent); }
+    footer { max-width:1440px; margin:auto; padding:0 30px 28px; color:var(--muted); font-size:12px; }
+    @media (max-width:1100px) { main { grid-template-columns:minmax(310px,370px) 1fr; } .detail { grid-column:1/-1; } }
+    @media (max-width:700px) { header { padding:20px 16px 8px; align-items:start; flex-direction:column; } main { padding:12px 16px; grid-template-columns:1fr; } .detail { grid-column:auto; } }
+  </style>
+</head>
+<body>
+  <header><div><h1>SystemOne × 俄罗斯方块</h1><p>每个方块由模型选择落点，页面逐步展示决策和控制过程</p></div><div class="pill" id="model-pill">模型：english · 等待开始</div></header>
+  <main>
+    <section>
+      <h2>游戏棋盘</h2>
+      <div class="board-wrap"><canvas id="board" width="300" height="600" aria-label="俄罗斯方块棋盘"></canvas></div>
+      <div class="stats"><div class="stat"><span>已放方块</span><strong id="pieces">0</strong></div><div class="stat"><span>消除行数</span><strong id="lines">0</strong></div><div class="stat"><span>下一方块</span><strong id="next">—</strong></div></div>
+      <div class="controls"><button id="start">开始自动运行</button><button class="secondary" id="step">单步放置</button><button class="secondary" id="pause">暂停</button><button class="secondary" id="reset">重开</button></div>
+      <label class="speed">指令动画间隔 <input id="speed" type="range" min="80" max="900" value="300"><span id="speed-value">300 ms</span></label>
+      <div class="status" id="status" role="status">准备就绪。点击“开始自动运行”或“单步放置”。</div>
+    </section>
+    <section>
+      <div class="headrow"><h2>候选落点</h2><span class="muted" id="candidate-count">0 个</span></div>
+      <p>规则引擎结合下一方块预览筛选落点：差距明显时留 1 个，接近时留 2 个；SystemOne 做最终选择。点击候选可预览。</p>
+      <div class="candidate-list" id="candidates"></div>
+    </section>
+    <section class="detail">
+      <h2>决策过程</h2>
+      <div class="muted" id="decision-summary">尚无模型决策</div>
+      <h2 style="margin-top:20px">控制指令</h2><div class="timeline" id="timeline"></div>
+      <details open><summary>发给 SystemOne 的请求</summary><pre id="request">—</pre></details>
+      <details open><summary>SystemOne 原始响应</summary><pre id="response">—</pre></details>
+      <h2 style="margin-top:15px">逐步记录</h2><div class="events" id="events"></div>
+    </section>
+  </main>
+  <footer>页面直接请求 main.py 的 /api/v1/systemone。浅色虚影表示目标落点；决策期间棋盘暂停，避免落点失效。<a href="../snake/index.html">玩贪吃蛇</a></footer>
+  <script src="./core.js"></script>
+  <script src="../config.js"></script>
+  <script>
+    const { WIDTH, HEIGHT, PIECES, emptyBoard, rotations, enumerateCandidates, executeCommands, buildDecisionRequest, readChoice, decisionProbabilities } = window.TetrisCore;
+    const API_KEY = window.SYSTEMONE_API_KEY;
+    const API_URL = 'http://127.0.0.1:8000/api/v1/systemone';
+
+    const $ = id => document.getElementById(id);
+    const canvas = $('board'), ctx = canvas.getContext('2d');
+    const colors = { I:'#63d9e9', O:'#f8d36e', T:'#bd94fa', S:'#70dfac', Z:'#fa8297', J:'#7ca9ff', L:'#f9ac70' };
+    let board, current, next, bag, candidates, selected, preview, visual, pieces, lines, running, busy, generation, probabilities, lastChosenId, allowPreview;
+
+    function drawCell(x, y, color, alpha = 1) {
+      if (y < 0 || y >= HEIGHT) return;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.fillRect(x * 30 + 1, y * 30 + 1, 28, 28);
+      ctx.fillStyle = '#ffffff25';
+      ctx.fillRect(x * 30 + 1, y * 30 + 1, 28, 4);
+      ctx.globalAlpha = 1;
+    }
+    function render() {
+      ctx.fillStyle = '#0a1427'; ctx.fillRect(0, 0, 300, 600);
+      ctx.strokeStyle = '#1d2c44'; ctx.lineWidth = 1;
+      for (let x = 1; x < WIDTH; x++) { ctx.beginPath(); ctx.moveTo(x * 30 + .5, 0); ctx.lineTo(x * 30 + .5, 600); ctx.stroke(); }
+      for (let y = 1; y < HEIGHT; y++) { ctx.beginPath(); ctx.moveTo(0, y * 30 + .5); ctx.lineTo(300, y * 30 + .5); ctx.stroke(); }
+      board.forEach((row, y) => row.forEach((cell, x) => { if (cell) drawCell(x, y, '#354e6f'); }));
+      const target = allowPreview ? (preview || selected) : null;
+      if (target && current) for (const [dx, dy] of target.cells) drawCell(target.x + dx, target.y + dy, colors[current], .38);
+      if (visual && current) for (const [dx, dy] of rotations(current)[visual.rotation]) drawCell(visual.x + dx, dy, colors[current]);
+    }
+    function setStatus(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
+    function log(message) { const item = document.createElement('div'); item.className = 'event'; item.textContent = `${new Date().toLocaleTimeString()}  ${message}`; $('events').prepend(item); }
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+    function drawBag() { if (!bag.length) bag = [...PIECES].sort(() => Math.random() - .5); return bag.pop(); }
+    function renderCandidates() {
+      $('candidate-count').textContent = `${candidates.length} 个`;
+      $('candidates').replaceChildren(...candidates.map(c => {
+        const item = document.createElement('button');
+        item.className = `candidate${(selected?.id || lastChosenId) === c.id ? ' selected' : ''}${preview?.id === c.id ? ' preview' : ''}`;
+        const label = document.createElement('strong'); label.textContent = c.id;
+        const description = document.createElement('div');
+        description.textContent = `旋转 ${c.rotation} · 第 ${c.x + 1} 列 · 清行 ${c.lines}`;
+        const detail = document.createElement('small'); detail.textContent = `空洞 ${c.holes} · 最高 ${c.height} · 起伏 ${c.bumpiness}`;
+        description.append(detail);
+        if (probabilities) {
+          const probability = document.createElement('div'); probability.className = 'probability';
+          const bar = document.createElement('i'); bar.style.width = `${Math.max(2, probabilities[c.id] * 100)}%`;
+          const value = document.createElement('span'); value.textContent = `模型概率 ${(probabilities[c.id] * 100).toFixed(1)}%`;
+          probability.append(bar, value); description.append(probability);
+        }
+        item.append(label, description);
+        item.onclick = () => { if (!allowPreview) return; preview = preview?.id === c.id ? null : c; renderCandidates(); render(); };
+        return item;
+      }));
+    }
+    function reset() {
+      generation++; running = false; busy = false;
+      board = emptyBoard(); bag = []; current = drawBag(); next = drawBag();
+      candidates = []; selected = null; preview = null; visual = { x:3, rotation:0 }; pieces = 0; lines = 0;
+      probabilities = null; lastChosenId = null; allowPreview = false;
+      $('pieces').textContent = '0'; $('lines').textContent = '0'; $('next').textContent = next;
+      $('request').textContent = '—'; $('response').textContent = '—'; $('decision-summary').textContent = '尚无模型决策';
+      $('timeline').replaceChildren(); $('events').replaceChildren(); $('model-pill').textContent = '模型：english · 等待开始';
+      setStatus('准备就绪。点击“开始自动运行”或“单步放置”。'); renderCandidates(); render();
+    }
+    async function onePiece(token) {
+      busy = true; selected = null; preview = null; visual = { x:3, rotation:0 }; $('timeline').replaceChildren();
+      probabilities = null; lastChosenId = null; allowPreview = true;
+      candidates = enumerateCandidates(board, current, next); renderCandidates(); render();
+      if (!candidates.length) { setStatus('游戏结束：新方块无合法落点。'); log('游戏结束'); running = false; busy = false; return; }
+      const request = buildDecisionRequest(board, current, candidates, next);
+      $('request').textContent = JSON.stringify(request, null, 2); $('response').textContent = '等待模型响应…';
+      $('decision-summary').textContent = `方块 ${current}：正在请求 SystemOne…`;
+      setStatus(`SystemOne 正在为 ${current} 方块选择落点…`); log(`提交 ${current} 方块和 ${candidates.length} 个候选落点`);
+      try {
+        const started = performance.now();
+        const response = await fetch(API_URL, {
+          method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${API_KEY}` }, body:JSON.stringify(request),
+        });
+        const data = await response.json();
+        if (token !== generation) return;
+        $('response').textContent = JSON.stringify(data, null, 2);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(data)}`);
+        selected = readChoice(data, candidates); preview = null;
+        probabilities = decisionProbabilities(data, candidates); lastChosenId = selected.id;
+        renderCandidates(); render();
+        const elapsed = Math.round(performance.now() - started);
+        $('model-pill').textContent = `模型：${data.routing?.model || 'english'} · ${elapsed} ms`;
+        $('decision-summary').textContent = `选中 ${selected.id} · 旋转 ${selected.rotation} · 第 ${selected.x + 1} 列 · ${elapsed} ms`;
+        setStatus(`模型选中 ${selected.id}，开始执行 ${selected.commands.length} 条指令。`);
+        log(`SystemOne 选中 ${selected.id}（${elapsed} ms）`);
+        const commands = selected.commands;
+        const chips = commands.map(command => { const chip = document.createElement('span'); chip.className = 'cmd'; chip.textContent = command; $('timeline').append(chip); return chip; });
+        for (let i = 0; i < commands.length; i++) {
+          if (token !== generation) return;
+          const command = commands[i]; chips[i].classList.add('active');
+          if (command === 'left') visual.x--;
+          else if (command === 'right') visual.x++;
+          else if (command === 'rotate') visual.rotation = (visual.rotation + 1) % rotations(current).length;
+          else if (command === 'hard_drop') {
+            const result = executeCommands(board, current, commands);
+            board = result.board; lines += result.lines; pieces++;
+            $('pieces').textContent = String(pieces); $('lines').textContent = String(lines);
+            visual = null; selected = null; preview = null; allowPreview = false;
+          }
+          render(); log(`执行 ${command}`);
+          await sleep(Number($('speed').value));
+          chips[i].classList.remove('active'); chips[i].classList.add('done');
+        }
+        if (token !== generation) return;
+        current = next; next = drawBag(); $('next').textContent = next;
+        visual = { x:3, rotation:0 }; renderCandidates(); render();
+        setStatus(`已放置 ${pieces} 个方块，累计消除 ${lines} 行。`);
+      } catch (error) {
+        if (token === generation) { running = false; setStatus(`决策暂停：${error.message}`, true); log(`错误：${error.message}`); }
+      } finally { if (token === generation) busy = false; }
+    }
+    async function loop(single = false) {
+      if (busy) return;
+      const token = generation;
+      running = !single;
+      do { await onePiece(token); } while (running && token === generation);
+    }
+    $('start').onclick = () => { if (busy) { running = true; return; } loop(false); };
+    $('step').onclick = () => loop(true);
+    $('pause').onclick = () => { running = false; setStatus('将在当前方块放置后暂停。'); };
+    $('reset').onclick = reset;
+    $('speed').oninput = () => { $('speed-value').textContent = `${$('speed').value} ms`; };
+    generation = 0; reset();
+  </script>
+</body>
+</html>
